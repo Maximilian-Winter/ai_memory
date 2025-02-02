@@ -3,6 +3,7 @@ from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Dict, Optional
 import json
 import shutil
@@ -63,33 +64,38 @@ class SemanticMemory:
         self._consolidate_patterns()
         return memory_id
 
-    def recall(self, query: str, n_results: int = 5,
-               context_filter: Optional[Dict] = None) -> List[Dict]:
-        """Recall memories similar to query"""
+
+
+    def recall(self, query: str, n_results: int = 5, context_filter: Optional[Dict] = None) -> List[Dict]:
+        """Recall memories similar to query using parallel search."""
         query_embedding = self.encoder.encode(query).tolist()
-        results = []
-        seen_contents = set()
 
-        for collection, mem_type in [
-            (self.immediate, "immediate"),
-            (self.working, "working"),
-            (self.long_term, "long_term")
-        ]:
+        def search(collection, mem_type):
+            if collection.count() == 0:
+                return []
             try:
-                if collection.count() == 0:
-                    continue
-
                 layer_results = collection.query(
                     query_embeddings=[query_embedding],
                     n_results=min(n_results, collection.count()),
                     where=context_filter if context_filter and len(context_filter) > 0 else None
                 )
-
-                results.extend(self._format_results(layer_results, mem_type))
+                return self._format_results(layer_results, mem_type)
             except Exception as e:
                 print(f"Warning: Error querying {mem_type} memory: {str(e)}")
+                return []
 
-        # Deduplicate and sort results
+        with ThreadPoolExecutor() as executor:
+            futures = {
+                executor.submit(search, self.immediate, "immediate"),
+                executor.submit(search, self.working, "working"),
+                executor.submit(search, self.long_term, "long_term"),
+            }
+            results = []
+            for future in futures:
+                results.extend(future.result())
+
+        # Deduplicate & sort results
+        seen_contents = set()
         unique_results = []
         for result in results:
             if result['content'] not in seen_contents:
@@ -162,7 +168,8 @@ class SemanticMemory:
                         ids=[pattern_id]
                     )
 
-                    self.working.delete(ids=[working_memories['ids'][idx]])
+                    if "ids" in working_memories and working_memories["ids"]:
+                        self.working.delete(ids=[working_memories["ids"][idx]])
 
         # Cleanup immediate memory
         if len(immediate_memories['ids']) > 100:
@@ -213,7 +220,7 @@ class SemanticMemory:
         }
 
         return {
-            "content": documents[latest_idx],
+            "content": '\n'.join(documents),
             "metadata": pattern_metadata
         }
 
