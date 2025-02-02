@@ -1,8 +1,6 @@
 import uuid
 
 import chromadb
-from chromadb.config import Settings
-from scipy.spatial.distance import cosine
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from datetime import datetime
@@ -276,18 +274,13 @@ class SemanticMemory:
 
         return formatted
 
-    def compute_memory_score(
-        self,
-        metadata,
-        relevance,
-        date,
-        alpha_recency,
-        alpha_relevance
-    ):
-        recency = self.compute_recency(metadata, date)
+    def compute_memory_score(self, metadata, relevance, date, alpha_recency, alpha_relevance, alpha_frequency):
+        recency = self.compute_recency(metadata, date)  # Decays over time
+        frequency = np.log1p(metadata["access_count"])  # Log scaling
         return (
-            alpha_recency * recency
-            + alpha_relevance * relevance
+                alpha_recency * recency +  # Recency importance
+                alpha_relevance * relevance +  # Similarity score importance
+                alpha_frequency * frequency  # Frequent recall importance
         )
 
     def compute_recency(self, metadata, date):
