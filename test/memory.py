@@ -106,7 +106,7 @@ class SemanticMemory:
                 seen_contents.add(result['content'])
                 unique_results.append(result)
 
-        unique_results.sort(key=lambda x: self.compute_memory_score(x["metadata"], x["similarity"], current_date, 1, 1), reverse=True)
+        unique_results.sort(key=lambda x: self.compute_memory_score(x["metadata"], x["similarity"], current_date, 1, 1, 1), reverse=True)
         unique_results = unique_results[:n_results]
         for unique_result in unique_results:
             unique_result["metadata"]["last_access_timestamp"] = current_date.isoformat()
@@ -120,44 +120,58 @@ class SemanticMemory:
 
         return unique_results
 
-    def _consolidate_patterns(self):
-        """Consolidate patterns across memory layers"""
+    def _consolidate_patterns(self, min_age_seconds=3600, min_cluster_size=3, min_access_count=2):
+        """
+        Delayed consolidation:
+        - Only consolidate patterns from memories older than min_age_seconds.
+        - Only consolidate if cluster size is at least min_cluster_size.
+        - Only consolidate if memories have been recalled at least min_access_count times.
+        """
+        now = datetime.now()
         immediate_memories = self.immediate.get()
 
         if not immediate_memories['documents']:
             return
 
-        # Generate embeddings
-        embeddings = [
-            self.encoder.encode(doc)
-            for doc in immediate_memories['documents']
-        ]
+        # Filter memories that are old enough & recalled enough times
+        valid_indices = []
+        for i, meta in enumerate(immediate_memories['metadatas']):
+            memory_age = (now - datetime.fromisoformat(meta['timestamp'])).total_seconds()
+            if memory_age >= min_age_seconds and meta["access_count"] >= min_access_count:
+                valid_indices.append(i)
 
-        clusters = self._cluster_embeddings(embeddings)
+        if len(valid_indices) < min_cluster_size:
+            return  # Not enough data to form meaningful patterns
 
-        # Process immediate to working memory
+        # Filter documents and embeddings based on valid indices
+        filtered_docs = [immediate_memories['documents'][i] for i in valid_indices]
+        filtered_metas = [immediate_memories['metadatas'][i] for i in valid_indices]
+        filtered_embeddings = [self.encoder.encode(doc) for doc in filtered_docs]
+
+        # Cluster embeddings
+        clusters = self._cluster_embeddings(filtered_embeddings)
+
         for cluster_idx, cluster in enumerate(clusters):
-            if len(cluster) < 2:  # Skip singleton clusters
+            if len(cluster) < min_cluster_size:  # Ensure clusters are large enough
                 continue
 
-
             pattern_id = f"pattern_{uuid.uuid4()}"
-
             pattern = self._extract_pattern(
                 pattern_id,
-                [immediate_memories['documents'][i] for i in cluster],
-                [immediate_memories['metadatas'][i] for i in cluster]
+                [filtered_docs[i] for i in cluster],
+                [filtered_metas[i] for i in cluster]
             )
 
             pattern_embedding = self.encoder.encode(pattern['content']).tolist()
 
-            # Check for duplicates
+            # Check if this pattern already exists in working memory
             existing = self.working.query(
                 query_embeddings=[pattern_embedding],
                 n_results=1
             )
+
             if existing['distances'] and len(existing['distances'][0]) > 0 and existing['distances'][0][0] <= 0.01:
-                continue
+                continue  # Skip duplicate patterns
 
             self.working.add(
                 documents=[pattern['content']],
@@ -166,37 +180,7 @@ class SemanticMemory:
                 ids=[pattern_id]
             )
 
-        # Process working to long-term memory
-        working_memories = self.working.get()
-        if working_memories['documents']:
-            for idx, (doc, meta) in enumerate(zip(working_memories['documents'],
-                                                  working_memories['metadatas'])):
-                date = datetime.now()
-                source_count = meta.get('source_count', 0)
-                pattern_age = (date -
-                               datetime.fromisoformat(meta['timestamp'])).total_seconds()
-
-                if source_count >= 3 and pattern_age > 86400:  # 24 hours
-                    long_term_id = f"long_term_{uuid.uuid4()}"
-                    long_term_embedding = self.encoder.encode(doc).tolist()
-                    metadata = {
-                        "timestamp": date,
-                        "last_access_timestamp": date,
-                        "access_count": meta["access_count"],
-                        "long_term": long_term_id,
-                        "type": "long_term"
-                    }
-                    self.long_term.add(
-                        documents=[doc],
-                        metadatas=[metadata],
-                        embeddings=[long_term_embedding],
-                        ids=[long_term_id]
-                    )
-
-                    if "ids" in working_memories and working_memories["ids"]:
-                        self.working.delete(ids=[working_memories["ids"][idx]])
-
-        # Cleanup immediate memory
+        # Cleanup immediate memory only when necessary
         if len(immediate_memories['ids']) > 100:
             oldest_ids = immediate_memories['ids'][:-100]
             self.immediate.delete(ids=oldest_ids)
