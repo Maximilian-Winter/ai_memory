@@ -1,5 +1,8 @@
+import uuid
+
 import chromadb
 from chromadb.config import Settings
+from scipy.spatial.distance import cosine
 from sentence_transformers import SentenceTransformer
 import numpy as np
 from datetime import datetime
@@ -20,7 +23,7 @@ class SemanticMemory:
         """Initialize the semantic memory system"""
         self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
         self.client = chromadb.PersistentClient(path=persist_directory)
-
+        self.decay_factor = 0.98
         # Create collections with cosine similarity
         self.immediate = self.client.get_or_create_collection(
             name="immediate_memory",
@@ -41,14 +44,17 @@ class SemanticMemory:
         """Store new memory with optional context"""
         timestamp = datetime.now().isoformat()
 
+
+        memory_id = f"mem_{uuid.uuid4()}"
         metadata = {
             "timestamp": timestamp,
+            "last_access_timestamp": timestamp,
+            "access_count": 1,
+            "memory_id": memory_id,
             "type": "memory"
         }
         if context:
             metadata.update(context)
-
-        memory_id = f"mem_{timestamp}"
 
         # Generate embedding
         embedding = self.encoder.encode(content).tolist()
@@ -66,17 +72,17 @@ class SemanticMemory:
 
 
 
-    def recall(self, query: str, n_results: int = 5, context_filter: Optional[Dict] = None) -> List[Dict]:
+    def recall(self, query: str, n_results: int = 5, context_filter: Optional[Dict] = None, current_date: datetime = datetime.now()) -> List[Dict]:
         """Recall memories similar to query using parallel search."""
         query_embedding = self.encoder.encode(query).tolist()
 
-        def search(collection, mem_type):
+        def search(collection: chromadb.Collection, mem_type):
             if collection.count() == 0:
                 return []
             try:
                 layer_results = collection.query(
                     query_embeddings=[query_embedding],
-                    n_results=min(n_results, collection.count()),
+                    n_results=min(n_results * 4, collection.count()),
                     where=context_filter if context_filter and len(context_filter) > 0 else None
                 )
                 return self._format_results(layer_results, mem_type)
@@ -102,8 +108,19 @@ class SemanticMemory:
                 seen_contents.add(result['content'])
                 unique_results.append(result)
 
-        unique_results.sort(key=lambda x: x['similarity'], reverse=True)
-        return unique_results[:n_results]
+        unique_results.sort(key=lambda x: self.compute_memory_score(x["metadata"], x["similarity"], current_date, 1, 1), reverse=True)
+        unique_results = unique_results[:n_results]
+        for unique_result in unique_results:
+            unique_result["metadata"]["last_access_timestamp"] = current_date.isoformat()
+            unique_result["metadata"]["access_count"] = unique_result["metadata"]["access_count"] + 1
+            if unique_result["metadata"]["type"] == "immediate":
+                self.immediate.update(unique_result["metadata"]["memory_id"], metadatas=unique_result["metadata"])
+            elif unique_result["metadata"]["type"] == "working":
+                self.working.update(unique_result["metadata"]["pattern_id"], metadatas=unique_result["metadata"])
+            elif unique_result["metadata"]["type"] == "long_term":
+                self.long_term.update(unique_result["metadata"]["memory_id"], metadatas=unique_result["metadata"])
+
+        return unique_results
 
     def _consolidate_patterns(self):
         """Consolidate patterns across memory layers"""
@@ -125,12 +142,15 @@ class SemanticMemory:
             if len(cluster) < 2:  # Skip singleton clusters
                 continue
 
+
+            pattern_id = f"pattern_{uuid.uuid4()}"
+
             pattern = self._extract_pattern(
+                pattern_id,
                 [immediate_memories['documents'][i] for i in cluster],
                 [immediate_memories['metadatas'][i] for i in cluster]
             )
 
-            pattern_id = f"pattern_{datetime.now().isoformat()}_{cluster_idx}"
             pattern_embedding = self.encoder.encode(pattern['content']).tolist()
 
             # Check for duplicates
@@ -153,19 +173,26 @@ class SemanticMemory:
         if working_memories['documents']:
             for idx, (doc, meta) in enumerate(zip(working_memories['documents'],
                                                   working_memories['metadatas'])):
+                date = datetime.now()
                 source_count = meta.get('source_count', 0)
-                pattern_age = (datetime.now() -
+                pattern_age = (date -
                                datetime.fromisoformat(meta['timestamp'])).total_seconds()
 
                 if source_count >= 3 and pattern_age > 86400:  # 24 hours
-                    pattern_id = f"longterm_{datetime.now().isoformat()}_{idx}"
-                    pattern_embedding = self.encoder.encode(doc).tolist()
-
+                    long_term_id = f"long_term_{uuid.uuid4()}"
+                    long_term_embedding = self.encoder.encode(doc).tolist()
+                    metadata = {
+                        "timestamp": date,
+                        "last_access_timestamp": date,
+                        "access_count": meta["access_count"],
+                        "long_term": long_term_id,
+                        "type": "long_term"
+                    }
                     self.long_term.add(
                         documents=[doc],
-                        metadatas=[meta],
-                        embeddings=[pattern_embedding],
-                        ids=[pattern_id]
+                        metadatas=[metadata],
+                        embeddings=[long_term_embedding],
+                        ids=[long_term_id]
                     )
 
                     if "ids" in working_memories and working_memories["ids"]:
@@ -206,15 +233,16 @@ class SemanticMemory:
 
         return clusters
 
-    def _extract_pattern(self, documents: List[str],
+    def _extract_pattern(self, pattern_id, documents: List[str],
                          metadatas: List[Dict]) -> Dict:
         """Extract pattern from cluster of similar memories"""
-        latest_idx = max(range(len(metadatas)),
-                         key=lambda i: metadatas[i]['timestamp'])
-
+        date = datetime.now().isoformat()
         pattern_metadata = {
             "type": "pattern",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": date,
+            "pattern_id": pattern_id,
+            "last_access_timestamp": date,
+            "access_count": 1,
             "source_count": len(documents),
             "source_timestamps": json.dumps([m['timestamp'] for m in metadatas])
         }
@@ -247,6 +275,40 @@ class SemanticMemory:
                 })
 
         return formatted
+
+    def compute_memory_score(
+        self,
+        metadata,
+        relevance,
+        date,
+        alpha_recency,
+        alpha_relevance
+    ):
+        recency = self.compute_recency(metadata, date)
+        return (
+            alpha_recency * recency
+            + alpha_relevance * relevance
+        )
+
+    def compute_recency(self, metadata, date):
+        decay_factor = self.decay_factor
+        time_diff = date - datetime.fromisoformat(
+            metadata["last_access_timestamp"]
+        )
+        hours_diff = time_diff.total_seconds() / 3600
+        recency = decay_factor**hours_diff
+        return recency
+
+    @staticmethod
+    def normalize_scores(scores):
+        min_score, max_score = np.min(scores), np.max(scores)
+        if min_score == max_score:
+            return np.zeros_like(scores)
+        return (scores - min_score) / (max_score - min_score)
+
+    @staticmethod
+    def get_top_indices(scores, k):
+        return scores.argsort()[-k:][::-1]
 
     def get_stats(self) -> Dict:
         """Get memory system statistics"""
