@@ -132,7 +132,7 @@ class SemanticMemory:
                 query_embeddings=[pattern_embedding],
                 n_results=1
             )
-            if existing['distances'] and len(existing['distances'][0]) > 0 and existing['distances'][0][0] < 0.1:
+            if existing['distances'] and len(existing['distances'][0]) > 0 and existing['distances'][0][0] <= 0.01:
                 continue
 
             self.working.add(
