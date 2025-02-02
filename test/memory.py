@@ -15,7 +15,6 @@ persist_directory = "./test_semantic_memory"
 if os.path.exists(persist_directory):
     shutil.rmtree(persist_directory)
 
-
 class SemanticMemory:
     def __init__(self, persist_directory: str = "./memory"):
         """Initialize the semantic memory system"""
@@ -131,7 +130,7 @@ class SemanticMemory:
 
         # Process immediate to working memory
         for cluster_idx, cluster in enumerate(clusters):
-            if len(cluster) < 2:  # Skip singleton clusters
+            if len(cluster) < 4:  # Skip singleton clusters
                 continue
 
 
@@ -276,8 +275,7 @@ class SemanticMemory:
 
 if __name__ == "__main__":
     # Create a more complex example showing memory dynamics
-    from datetime import datetime, timedelta
-    import time
+    from datetime import datetime
 
     # Initialize with clean state
     memory = SemanticMemory("./test_semantic_memory")
