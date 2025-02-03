@@ -54,7 +54,6 @@ chat_history = [
      "content": "It really does! Einstein revolutionized our understanding of reality, showing that time isn’t absolute and space can bend. The universe is far stranger than we ever imagined!"}
 ]
 
-# Print the chat history for reference
 pair = []
 pair_list = []
 memory = SemanticMemory("./test_semantic_memory")
@@ -109,13 +108,13 @@ chat_history_2 = [
      "content": "Absolutely! Einstein’s work opened up a universe of strange possibilities, many of which we’re still exploring today. The more we learn, the more mysterious and beautiful the cosmos becomes!"}
 ]
 
-# Print the second chat history for reference
 for message in chat_history_2:
     if message["role"] == "user":
-        out = f"{message['role'].capitalize()}: {message['content']}"
+        out = f"{message['content']}"
         results = memory.recall(out, 3)
-        print(out)
+        print(f"Input: {out}\n")
         for r in results:
-            print(f"\nMemory: {r['content']}")
+            print(f"Memory: {r['content']}")
             print(f"Type: {r['memory_type']}")
             print(f"Similarity: {r['similarity']:.3f}")
+        print("*** End of Recall ***")

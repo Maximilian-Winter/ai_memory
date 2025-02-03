@@ -1,5 +1,7 @@
 import uuid
 
+from scipy.spatial.distance import pdist
+from sklearn.cluster import DBSCAN
 import chromadb
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -252,6 +254,7 @@ class SemanticMemory:
         hours_diff = time_diff.total_seconds() / 3600
         recency = decay_factor**hours_diff
         return recency
+
 
     def get_stats(self) -> Dict:
         """Get memory system statistics"""
