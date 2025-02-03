@@ -39,9 +39,8 @@ class SemanticMemory:
         )
 
 
-    def store(self, content: str, context: Optional[Dict] = None) -> str:
+    def store(self, content: str, context: Optional[Dict] = None, timestamp = datetime.now().isoformat()) -> str:
         """Store new memory with optional context"""
-        timestamp = datetime.now().isoformat()
 
         memory_id = f"mem_{uuid.uuid4()}"
 
@@ -66,7 +65,7 @@ class SemanticMemory:
             ids=[memory_id]
         )
 
-        self._consolidate_patterns()
+        self._consolidate_patterns(timestamp)
         return memory_id
 
 
@@ -119,7 +118,7 @@ class SemanticMemory:
 
         return unique_results
 
-    def _consolidate_patterns(self):
+    def _consolidate_patterns(self, timestamp):
         """Consolidate patterns across memory layers"""
         working_memories = self.working.get()
 
@@ -144,7 +143,8 @@ class SemanticMemory:
             pattern = self._extract_pattern(
                 pattern_id,
                 [working_memories['documents'][i] for i in cluster],
-                [working_memories['metadatas'][i] for i in cluster]
+                [working_memories['metadatas'][i] for i in cluster],
+                timestamp
             )
 
             pattern_embedding = self.encoder.encode(pattern['content']).tolist()
@@ -194,14 +194,14 @@ class SemanticMemory:
         return clusters
 
     def _extract_pattern(self, pattern_id, documents: List[str],
-                         metadatas: List[Dict]) -> Dict:
+                         metadatas: List[Dict], timestamp = datetime.now().isoformat()) -> Dict:
         """Extract pattern from cluster of similar memories"""
-        date = datetime.now().isoformat()
+
         pattern_metadata = {
             "type": "pattern",
-            "timestamp": date,
+            "timestamp": timestamp,
             "pattern_id": pattern_id,
-            "last_access_timestamp": date,
+            "last_access_timestamp": timestamp,
             "access_count": 1,
             "source_count": len(documents),
             "source_timestamps": json.dumps([m['timestamp'] for m in metadatas])
