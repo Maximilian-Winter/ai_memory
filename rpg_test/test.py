@@ -412,7 +412,7 @@ chat_history = [
 
 pair = []
 pair_list = []
-memory = SemanticMemory("./test_semantic_memory")
+memory = SemanticMemory("./test_semantic_memory", sentence_transformer_model_path="all-MiniLM-L6-v2")
 
 for message in chat_history:
     pair.append(f"<{message['role'].capitalize()}> {message['content']} </{message['role'].capitalize()}>\n")
