@@ -4,3 +4,7 @@
 /cognitive/test_semantic_memory
 /cognitive/__pycache__
 /experiment/test_semantic_memory
+/rpg_test/chat_history_20240730_000840.json
+/rpg_test/test_semantic_memory
+/old_experiments/test_semantic_memory
+/semantic_memory/__pycache__

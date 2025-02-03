@@ -1,6 +1,6 @@
 import json
 
-from ai_memory.cognitive.memory import SemanticMemory
+from ai_memory.semantic_memory.memory import SemanticMemory
 
 chat_history = [
     {"role": "user", "content": "Can you explain Einstein's theory of relativity in simple terms?"},

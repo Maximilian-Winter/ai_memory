@@ -1,7 +1,6 @@
 import uuid
 
-from scipy.spatial.distance import pdist
-from sklearn.cluster import DBSCAN
+
 import chromadb
 from sentence_transformers import SentenceTransformer
 import numpy as np
@@ -18,9 +17,9 @@ if os.path.exists(persist_directory):
     shutil.rmtree(persist_directory)
 
 class SemanticMemory:
-    def __init__(self, persist_directory: str = "./memory"):
+    def __init__(self, persist_directory: str = "./memory", sentence_transformer_model_path: str = "Snowflake/snowflake-arctic-embed-l-v2.0", trust_remote_code: bool = False, device: str = "cpu"):
         """Initialize the semantic memory system"""
-        self.encoder = SentenceTransformer("nomic-ai/nomic-embed-text-v1", trust_remote_code=True)
+        self.encoder = SentenceTransformer(sentence_transformer_model_path, trust_remote_code=trust_remote_code, device=device)
         self.client = chromadb.PersistentClient(path=persist_directory)
 
         self.decay_factor = 0.98
