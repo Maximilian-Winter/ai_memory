@@ -22,25 +22,8 @@ chat_history = [
 
     {"role": "user", "content": "That’s mind-blowing! Does this mean time travel to the future is possible?"},
     {"role": "assistant",
-     "content": "In a way, yes! Since time slows down in strong gravitational fields or at high speeds (as predicted by relativity), traveling near light speed or staying near a black hole could allow you to move into the future relative to others. However, traveling back in time is a whole other challenge, requiring exotic physics that we haven't proven yet!"}
-]
-
-# Print the chat history for reference
-pair = []
-pair_list = []
-memory = SemanticMemory("./test_semantic_memory")
-
-for message in chat_history:
-    pair.append(f"<{message['role'].capitalize()}> {message['content']} </{message['role'].capitalize()}>\n")
-    if len(pair) == 2:
-        out = ''.join(pair)
-        pair_list.append(out)
-        pair = []
-        memory.store(out)
-
-print(json.dumps(pair_list, indent=4))
-chat_history_2 = [
-    {"role": "user",
+     "content": "In a way, yes! Since time slows down in strong gravitational fields or at high speeds (as predicted by relativity), traveling near light speed or staying near a black hole could allow you to move into the future relative to others. However, traveling back in time is a whole other challenge, requiring exotic physics that we haven't proven yet!"},
+{"role": "user",
      "content": "I've been thinking more about our discussion on relativity. You mentioned time dilation near a black hole—does that mean astronauts could use this to extend their lifespan?"},
     {"role": "assistant",
      "content": "Great follow-up! Yes, in theory, an astronaut orbiting near a black hole, in a region with extreme gravitational time dilation, would experience time much slower than people on Earth. This means they would effectively age slower, relative to those who remained on Earth. However, surviving near a black hole would be incredibly challenging due to extreme tidal forces and radiation."},
@@ -71,6 +54,60 @@ chat_history_2 = [
      "content": "It really does! Einstein revolutionized our understanding of reality, showing that time isn’t absolute and space can bend. The universe is far stranger than we ever imagined!"}
 ]
 
+# Print the chat history for reference
+pair = []
+pair_list = []
+memory = SemanticMemory("./test_semantic_memory")
+
+for message in chat_history:
+    pair.append(f"<{message['role'].capitalize()}> {message['content']} </{message['role'].capitalize()}>\n")
+    if len(pair) == 2:
+        out = ''.join(pair)
+        pair_list.append(out)
+        pair = []
+        memory.store(out)
+
+
+chat_history_2 = [
+    {"role": "user",
+     "content": "I've been thinking about what you said last time—if time slows down near a black hole, does that mean someone could theoretically survive to see the end of the universe?"},
+    {"role": "assistant",
+     "content": "That’s a fascinating thought! In theory, yes—if someone stayed near the event horizon of a supermassive black hole without falling in, time for them would pass much slower than for the rest of the universe. Billions of years could pass outside while they only experience a fraction of that time. However, surviving that long near a black hole would be nearly impossible due to extreme radiation and tidal forces."},
+
+    {"role": "user",
+     "content": "Right, you mentioned tidal forces before. How exactly do they work near a black hole?"},
+    {"role": "assistant",
+     "content": "Great question! Tidal forces occur because gravity pulls more strongly on objects that are closer to a massive body. Near a black hole, this difference in gravitational pull can be extreme—if you were falling in feet-first, your feet would experience much stronger gravity than your head, stretching you into what scientists call 'spaghettification.'"},
+
+    {"role": "user",
+     "content": "Yikes! Sounds like falling into a black hole is a one-way trip. But what about those rotating black holes you mentioned last time? Could they allow for a different kind of experience?"},
+    {"role": "assistant",
+     "content": "Yes! Rotating black holes, also known as Kerr black holes, have a unique feature called an ergosphere, where space itself is dragged along with the rotation. Some theories suggest that if you enter a Kerr black hole at just the right angle, you might avoid the singularity and possibly emerge somewhere else—though whether that 'somewhere else' is another universe or just oblivion is unknown."},
+
+    {"role": "user",
+     "content": "That reminds me of wormholes. If a Kerr black hole could, in theory, let you escape, could it be related to how a wormhole might work?"},
+    {"role": "assistant",
+     "content": "You're making great connections! Some theories suggest that a rotating black hole could act as a natural wormhole, but we don’t have any evidence to confirm this. Wormholes require exotic matter to stay open, whereas a Kerr black hole still has an event horizon, meaning once you cross it, escape isn’t guaranteed."},
+
+    {"role": "user",
+     "content": "Speaking of wormholes, if one could connect two points in time, could that allow for communication with the past?"},
+    {"role": "assistant",
+     "content": "In theory, yes! If one end of a wormhole was moved at relativistic speeds and then brought back, it could be at a different time than the other end, potentially allowing messages to be sent back in time. However, maintaining a stable wormhole, let alone using it for communication, is purely speculative at this point."},
+
+    {"role": "user",
+     "content": "So if time travel to the past is at least theoretically possible, why do most physicists think it's unlikely?"},
+    {"role": "assistant",
+     "content": "One reason is causality—allowing backward time travel could lead to paradoxes, like the famous 'grandfather paradox,' where someone could alter their own past and create logical inconsistencies. Additionally, even theoretical models that permit time loops require conditions that may not exist in reality, like exotic matter with negative energy density."},
+
+    {"role": "user",
+     "content": "Ah, the grandfather paradox! But what about the idea that the universe might prevent paradoxes naturally, like in the 'self-consistency principle'?"},
+    {"role": "assistant",
+     "content": "Good point! The Novikov self-consistency principle suggests that even if time travel were possible, events would always unfold in a way that avoids paradoxes. For example, if you traveled back in time and tried to prevent your grandparents from meeting, something would always intervene to ensure history stays consistent. This concept appears in some physics models but remains untested."},
+
+    {"role": "user", "content": "It's wild how relativity keeps leading to deeper and deeper questions!"},
+    {"role": "assistant",
+     "content": "Absolutely! Einstein’s work opened up a universe of strange possibilities, many of which we’re still exploring today. The more we learn, the more mysterious and beautiful the cosmos becomes!"}
+]
 
 # Print the second chat history for reference
 for message in chat_history_2:
