@@ -18,9 +18,14 @@ if os.path.exists(persist_directory):
 class SemanticMemory:
     def __init__(self, persist_directory: str = "./memory"):
         """Initialize the semantic memory system"""
-        self.encoder = SentenceTransformer('all-MiniLM-L6-v2')
+        self.encoder = SentenceTransformer("nomic-ai/nomic-embed-text-v1", trust_remote_code=True)
         self.client = chromadb.PersistentClient(path=persist_directory)
+
         self.decay_factor = 0.98
+        self.query_result_multiplier = 4
+        self.minimum_cluster_size = 2
+        self.minimum_cluster_similarity = 0.7
+
         # Create collections with cosine similarity
         self.working = self.client.get_or_create_collection(
             name="working_memory",
@@ -37,8 +42,11 @@ class SemanticMemory:
         """Store new memory with optional context"""
         timestamp = datetime.now().isoformat()
 
-
         memory_id = f"mem_{uuid.uuid4()}"
+
+        # Generate embedding
+        embedding = self.encoder.encode(content).tolist()
+
         metadata = {
             "timestamp": timestamp,
             "last_access_timestamp": timestamp,
@@ -48,9 +56,6 @@ class SemanticMemory:
         }
         if context:
             metadata.update(context)
-
-        # Generate embedding
-        embedding = self.encoder.encode(content).tolist()
 
         # Store in immediate memory
         self.working.add(
@@ -65,7 +70,7 @@ class SemanticMemory:
 
 
 
-    def recall(self, query: str, n_results: int = 5, context_filter: Optional[Dict] = None, current_date: datetime = datetime.now()) -> List[Dict]:
+    def recall(self, query: str, n_results: int = 5, context_filter: Optional[Dict] = None, current_date: datetime = datetime.now(), alpha_recency=1, alpha_relevance=1, alpha_frequency=1) -> List[Dict]:
         """Recall memories similar to query using parallel search."""
         query_embedding = self.encoder.encode(query).tolist()
 
@@ -75,7 +80,7 @@ class SemanticMemory:
             try:
                 layer_results = collection.query(
                     query_embeddings=[query_embedding],
-                    n_results=min(n_results * 4, collection.count()),
+                    n_results=min(n_results * self.query_result_multiplier, collection.count()),
                     where=context_filter if context_filter and len(context_filter) > 0 else None
                 )
                 return self._format_results(layer_results, mem_type)
@@ -98,7 +103,7 @@ class SemanticMemory:
         for result in results:
             if result['content'] not in seen_contents:
                 seen_contents.add(result['content'])
-                result["rank_score"] = self.compute_memory_score(result["metadata"], result["similarity"], current_date, 1, 1, 1)
+                result["rank_score"] = self.compute_memory_score(result["metadata"], result["similarity"], current_date, alpha_recency, alpha_relevance, alpha_frequency)
                 unique_results.append(result)
 
         unique_results.sort(key=lambda x: x['rank_score'], reverse=True)
@@ -107,9 +112,9 @@ class SemanticMemory:
             unique_result["metadata"]["last_access_timestamp"] = current_date.isoformat()
             unique_result["metadata"]["access_count"] = unique_result["metadata"]["access_count"] + 1
             if unique_result["metadata"]["type"] == "working":
-                self.working.update(unique_result["metadata"]["memory_id"], metadatas=unique_result["metadata"])
+                self.working.update([unique_result["metadata"]["memory_id"]], metadatas=[unique_result["metadata"]])
             elif unique_result["metadata"]["type"] == "long_term":
-                self.long_term.update(unique_result["metadata"]["pattern_id"], metadatas=unique_result["metadata"])
+                self.long_term.update([unique_result["metadata"]["pattern_id"]], metadatas=[unique_result["metadata"]])
 
         return unique_results
 
@@ -130,9 +135,8 @@ class SemanticMemory:
 
         # Process immediate to working memory
         for cluster_idx, cluster in enumerate(clusters):
-            if len(cluster) < 2:  # Skip singleton clusters
+            if len(cluster) < self.minimum_cluster_size:  # Skip singleton clusters
                 continue
-
 
             pattern_id = f"pattern_{uuid.uuid4()}"
 
@@ -159,13 +163,7 @@ class SemanticMemory:
                 ids=[pattern_id]
             )
 
-        # Cleanup immediate memory
-        if len(working_memories['ids']) > 100:
-            oldest_ids = working_memories['ids'][:-100]
-            self.working.delete(ids=oldest_ids)
-
-    def _cluster_embeddings(self, embeddings: List[np.ndarray],
-                            threshold: float = 0.8) -> List[List[int]]:
+    def _cluster_embeddings(self, embeddings: List[np.ndarray]) -> List[List[int]]:
         """Cluster embeddings using cosine similarity"""
         embeddings_array = np.stack(embeddings)
 
@@ -186,7 +184,7 @@ class SemanticMemory:
             used_indices.add(i)
 
             for j in range(i + 1, len(embeddings)):
-                if j not in used_indices and similarity_matrix[i, j] > threshold:
+                if j not in used_indices and similarity_matrix[i, j] > self.minimum_cluster_similarity:
                     cluster.append(j)
                     used_indices.add(j)
 
@@ -255,17 +253,6 @@ class SemanticMemory:
         recency = decay_factor**hours_diff
         return recency
 
-    @staticmethod
-    def normalize_scores(scores):
-        min_score, max_score = np.min(scores), np.max(scores)
-        if min_score == max_score:
-            return np.zeros_like(scores)
-        return (scores - min_score) / (max_score - min_score)
-
-    @staticmethod
-    def get_top_indices(scores, k):
-        return scores.argsort()[-k:][::-1]
-
     def get_stats(self) -> Dict:
         """Get memory system statistics"""
         return {
@@ -280,33 +267,58 @@ if __name__ == "__main__":
     # Initialize with clean state
     memory = SemanticMemory("./test_semantic_memory")
 
-    print("\n=== Initial State ===")
-    print("Adding memories about a quantum computing journey...")
+    memory.store(
+        "The sky has beautiful cirrus clouds today",
+        context={}
+    )
 
-    # Day 1: Initial learning
+    memory.store(
+        "Another day with beautiful cirrus clouds",
+        context={}
+    )
+
+    memory.store(
+        "The cirrus clouds create stunning patterns in the sky",
+        context={}
+    )
+    memory.store(
+        "Hi! My name is Max.",
+        context={}
+    )
+
+    memory.store(
+        "My favorite color is deep purple.",
+        context={}
+    )
+
+    memory.store(
+        "My most favorite food is tomato soup.",
+        context={}
+    )
+
+    memory.store(
+        "I love to listen to music.",
+        context={}
+    )
+
+    memory.store(
+        "My favorite musician is Charles Mingus.",
+        context={}
+    )
     memory.store(
         "Started learning about quantum computing basics today",
-        context={"category": "learning", "topic": "quantum_computing"}
+        context={}
     )
 
     memory.store(
         "Quantum bits or qubits can be in superposition, unlike classical bits",
-        context={"category": "learning", "topic": "quantum_computing"}
+        context={}
     )
 
     memory.store(
         "The sky has beautiful cirrus clouds today",
-        context={"category": "observation", "topic": "weather"}
+        context={}
     )
-
-    # Check state
-    print("\n=== After Initial Memories ===")
-    results = memory.recall("Tell me about quantum computing", n_results=5)
-    for r in results:
-        print(f"\nMemory: {r['content']}")
-        print(f"Type: {r['memory_type']}")
-        print(f"Similarity: {r['similarity']:.3f}")
-
     # Add more related memories
     memory.store(
         "Learned that qubits can exist in superposition of states",
@@ -324,16 +336,6 @@ if __name__ == "__main__":
         context={"category": "social", "topic": "meeting"}
     )
 
-    print("\n=== After More Memories ===")
-    print("Quantum computing related memories:")
-    results = memory.recall("What do you know about quantum computing?", n_results=5)
-    for r in results:
-        print(f"\nMemory: {r['content']}")
-        print(f"Type: {r['memory_type']}")
-        print(f"Similarity: {r['similarity']:.3f}")
-
-    # Simulate passage of time for pattern formation
-    print("\n=== Testing Working Memory Patterns ===")
     # Add more reinforcing memories
     memory.store(
         "The concept of superposition is fascinating in quantum computing",
@@ -344,13 +346,6 @@ if __name__ == "__main__":
         "In quantum computing, bits can be in multiple states simultaneously due to superposition",
         context={"category": "learning", "topic": "quantum_computing"}
     )
-
-    print("\nPatterns around superposition concept:")
-    results = memory.recall("Tell me about superposition in quantum computing", n_results=5)
-    for r in results:
-        print(f"\nMemory: {r['content']}")
-        print(f"Type: {r['memory_type']}")
-        print(f"Similarity: {r['similarity']:.3f}")
 
     # Add some weather observations to see different patterns
     memory.store(
@@ -363,28 +358,13 @@ if __name__ == "__main__":
         context={"category": "observation", "topic": "weather"}
     )
 
-    print("\n=== Testing Pattern Separation ===")
-    print("Weather-related memories:")
-    results = memory.recall("What do you remember about the sky and clouds?", n_results=5)
+    results = memory.recall("Hi, how are you doing?", n_results=5)
     for r in results:
         print(f"\nMemory: {r['content']}")
         print(f"Type: {r['memory_type']}")
         print(f"Similarity: {r['similarity']:.3f}")
 
-    # Get statistics about memory state
-    stats = memory.get_stats()
-    print("\n=== Memory System Statistics ===")
-    print(f"Working memory patterns: {stats['working_count']}")
-    print(f"Long-term memories: {stats['long_term_count']}")
-
-    # Test context filtering
-    print("\n=== Testing Context Filtering ===")
-    results = memory.recall(
-        "What have I learned?",
-        n_results=5,
-        context_filter={"category": "learning"}
-    )
-    print("\nLearning-related memories:")
+    results = memory.recall("Hi, do you remember my favorite musician?", n_results=5)
     for r in results:
         print(f"\nMemory: {r['content']}")
         print(f"Type: {r['memory_type']}")

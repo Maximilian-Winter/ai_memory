@@ -130,7 +130,7 @@ class SemanticMemory:
 
         # Process immediate to working memory
         for cluster_idx, cluster in enumerate(clusters):
-            if len(cluster) < 4:  # Skip singleton clusters
+            if len(cluster) < 2:  # Skip singleton clusters
                 continue
 
 
@@ -283,20 +283,57 @@ if __name__ == "__main__":
     print("\n=== Initial State ===")
     print("Adding memories about a quantum computing journey...")
 
-    # Day 1: Initial learning
+    memory.store(
+        "The sky has beautiful cirrus clouds today",
+        context={}
+    )
+
+    memory.store(
+        "Another day with beautiful cirrus clouds",
+        context={}
+    )
+
+    memory.store(
+        "The cirrus clouds create stunning patterns in the sky",
+        context={}
+    )
+    memory.store(
+        "Hi! My name is Max.",
+        context={}
+    )
+
+    memory.store(
+        "My favorite color is deep purple.",
+        context={}
+    )
+
+    memory.store(
+        "My most favorite food is tomato soup.",
+        context={}
+    )
+
+    memory.store(
+        "I love to listen to music.",
+        context={}
+    )
+
+    memory.store(
+        "My favorite musician is Charles Mingus.",
+        context={}
+    )
     memory.store(
         "Started learning about quantum computing basics today",
-        context={"category": "learning", "topic": "quantum_computing"}
+        context={}
     )
 
     memory.store(
         "Quantum bits or qubits can be in superposition, unlike classical bits",
-        context={"category": "learning", "topic": "quantum_computing"}
+        context={}
     )
 
     memory.store(
         "The sky has beautiful cirrus clouds today",
-        context={"category": "observation", "topic": "weather"}
+        context={}
     )
 
     # Check state
